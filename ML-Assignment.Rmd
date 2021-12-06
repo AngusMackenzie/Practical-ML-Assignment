@@ -1,0 +1,145 @@
+---
+title: "Practical-ML-Assignment"
+author: "Angus Mackenzie"
+date: "06/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+More information is available from the website here: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset).
+
+
+## Packages
+
+```{r message=FALSE}
+library(tidyverse);library(lubridate);library(factoextra);library(FactoMineR)
+library(caret);library(rattle);library(randomForest)
+```
+
+
+## Data Proccessing
+
+We first need to download the data and tidy it up.
+
+```{r}
+#### Data Download
+dftrain <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+dftest <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+#### Convert blank entry to NA
+dftrain <- dftrain %>% replace(. == "", NA)
+
+#### Find variables over 75% NA 
+vvar <- sapply(dftrain, function(x) sum(is.na(x)) )
+vvar <- vvar < round(nrow(dftrain)*0.75)
+
+vvar <- names(vvar[vvar])
+
+## Don't include meta information
+vvar <- vvar[8:length(vvar)]
+
+dftrain <- select(dftrain, all_of(vvar))
+
+#### Get dependent variable position and make it a factor
+ndv <- length(vvar)
+
+dftrain$classe <- as.factor(dftrain$classe)
+
+
+```
+
+
+## Principal Component Analysis (PCA)
+
+Now we'll do PCA to see if there are variables with little effect or are highly correlated.
+
+```{r , echo = TRUE, fig.height = 7, fig.width = 7, fig.align='center', dpi=300}
+#### PCA
+my_PCA <- PCA(dftrain[,-ndv], graph = FALSE)
+
+## Visualize
+fviz_pca_var(my_PCA, col.var="contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE)
+
+
+```
+
+
+# Machine Learning
+
+To find best model we are going to split the training data further into training and validation sets
+
+``` {r}
+#### Split Validation 20%
+smp_size <- floor(0.8 * nrow(dftrain))
+vtrain <- sample(seq_len(nrow(dftrain)), size = smp_size)
+
+dfvalid <- dftrain[-vtrain, ]
+dftrain <- dftrain[vtrain, ]
+
+```
+
+
+## Decision Tree
+
+Now a conditional inference tree will be performed using caret
+
+```{r , echo = TRUE, fig.height = 7, fig.width = 7, fig.align='center', dpi=300}
+#### Decision TRee
+my_rpart <- train(classe ~ ., data = dftrain, method = "rpart")
+
+## Visualize
+fancyRpartPlot(my_rpart$finalModel)
+
+```
+
+Lets see how accurate that was:
+
+``` {r}
+## Predict
+vtree_predict <- predict(my_rpart, dfvalid)
+
+confusionMatrix(vtree_predict, dfvalid$classe)
+```
+
+
+## Random Forest
+
+A random forest might work better.
+
+``` {r}
+#### Random Forest
+my_rf <- randomForest(classe ~ ., data = dftrain)
+
+## Predict
+vrf_predict <- predict(my_rf, dfvalid)
+
+confusionMatrix(vrf_predict, dfvalid$classe)
+```
+
+
+## Predict test data
+
+The random forest was far more successful. Finally we'll apply the model to the test subjects.
+
+``` {r}
+#### Select the same columns as in training
+dftest <- select(dftest, all_of(vvar[-ndv]))
+
+## Predict results
+predict(my_rf, dftest)
+
+```
+
+
+**Thank you for grading my assignment**
+
+
+
+
